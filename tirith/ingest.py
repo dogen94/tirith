@@ -8,7 +8,7 @@ import json
 import time
 
 # Local imports
-from util import ensure_cwd
+from .util import ensure_cwd
 
 
 # Scryfall data list
