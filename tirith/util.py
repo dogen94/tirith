@@ -1,6 +1,7 @@
 
 # Standard Library
 import os
+import json
 from functools import wraps
 
 
@@ -23,3 +24,13 @@ def ensure_cwd(*a, **kw):
             return fout
         return func_wrapper
     return wrap
+
+
+def read_json(fjson):
+    if os.path.isfile(fjson):
+        with open(fjson) as fp:
+            # Read what we just got and extract url
+            jout = json.load(fp)
+        return jout
+    else:
+        raise FileExistsError(f"{fjson} does not exist")

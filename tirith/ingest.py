@@ -4,11 +4,10 @@ import os
 import datetime
 from pathlib import Path
 from subprocess import Popen,PIPE
-import json
 import time
 
 # Local imports
-from .util import ensure_cwd
+from util import ensure_cwd, read_json
 
 
 # Scryfall data list
@@ -39,18 +38,22 @@ def ingest_url(url, **kw):
         raise Exception(stderr)
 
 
-def update_data(data_list=SFDATA, force=False):
+def update_local_data(data_list=SFDATA, force=False):
     today = datetime.datetime.now()
     for data in data_list:
         fout = f"{data}-{today.year}-{today.month}-{today.day}"
         # Dont ingest if exists and no force, else ingest
-        if not(os.path.exists(fout)) and force:
+        if not(os.path.exists(fout) and force):
             ingest_url(SFADDR + f"{data}", fout=f"bulk_data/{fout}")
         # Now need to pull the actual data inside data json
-        with open(f"bulk_data/{fout}") as fp:
-            # Read what we just got and extract url
-            jout = json.load(fp)
-            json_url = jout["download_uri"]
+        jout = read_json(f"bulk_data/{fout}")
+        json_url = jout["download_uri"]
         # Need to sleep 50ms before actual url ingestion
         time.sleep(0.05)
         ingest_url(json_url, fout=f"bulk_data/{fout}.json")
+        # Clean stub
+        os.remove(f"bulk_data/{fout}")
+
+
+if __name__ == '__main__':
+    update_local_data(force=True)
