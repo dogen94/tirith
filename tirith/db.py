@@ -60,7 +60,8 @@ class Database(object):
         conn, cursor = self.connect_db(dbdir)
         self.conn = conn
         self.cursor = cursor
-        self.table = None
+        self.tables = []
+        self.set_table()
         self.info = None
         self.primary = None
 
@@ -80,7 +81,10 @@ class Database(object):
     def genr8_table_exec(self, **kw):
         # Get title
         title = kw.pop("title")
-        self.table = title
+        if (title in self.tables):
+            raise Exception(f"Table {title} already exists in db")
+        else:
+            self.tables.append(title)
         # Start exec string
         exec_str = f"CREATE TABLE IF NOT EXISTS {title} ("
         cols = kw.pop("cols", COLSINFO)
@@ -99,17 +103,19 @@ class Database(object):
         exec_str += col_str + ")"
         return exec_str
 
-    def genr8_insert_exec(self,ocols, vals):
-        istr = f"INSERT INTO {self.table} ("
+    def genr8_insert_exec(self, table, ocols):
+        if (table not in self.tables):
+            raise Exception(f"Table {table} does not exist")
+        istr = f"INSERT INTO {table} ("
         istr += " ,".join(ocols) + ") "
         qs = ["?"] * len(ocols)
         istr += "VALUES (" + " ,".join(qs) + ")"
         return istr
 
-    def insert2table(self, ocols, vals):
-        input_str = self.genr8_insert_exec(ocols, vals)
+    def insert2table(self, table, ocols, vals):
+        input_str = self.genr8_insert_exec(table, ocols)
         # Insert data into table
-        self.cursor.execute(input_str)
+        self.cursor.execute(input_str, vals)
         # self.cursor.execute("INSERT INTO users (name, age) VALUES (?, ?)", ('Alice', 30))
         # Commit changes
         self.conn.commit()
@@ -117,6 +123,15 @@ class Database(object):
     def set_info(self, info, force = False):
         if (not self.info or (self.info and force)):
             self.info = info
+
+    def set_table(self):
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = self.cursor.fetchall()
+        if tables:
+            for table in tables:
+                self.tables.extend(table)
+        else:
+            self.tables = []
 
     def set_primary(self, col):
         if (not self.primary):
@@ -131,14 +146,17 @@ class Database(object):
 def fill_table(db, fjson, **kw):
     cols = kw.pop("cols", JSONCOLS)
     jout = read_json(fjson)
-    for entry in jout[:2]:
+    for entry in jout:
         vals = []
         ocols = []
         for col in cols:
-            v = entry[col]
+            v = entry.get(col, None)
             if db.info[col].get("func"):
                 v = db.info[col].get("func")(v)
             ocol = db.info[col].get("trans", col)
             vals.extend([v])
             ocols.extend([ocol])
-        db.insert2table(ocols, vals)
+        if None in vals or None in ocols:
+            continue
+        else:
+            db.insert2table("cards", ocols, vals)
