@@ -16,44 +16,6 @@ JSONCOLS = [
     "prices",
 ]
 
-COLSINFO = {
-    "oracle_id": {"dtype": "CHAR(36)"},
-    "name": {"dtype": "TEXT"},
-    "mana_cost": {"dtype": "INT"},
-    "cmc": {"dtype": "INT"},
-    "type_line": {"dtype": "TEXT"},
-    "oracle_text": {"dtype": "TEXT"},
-    "legalities": {"dtype": "CHAR(22)",
-                   "func": convert_legals},
-    "set_id": {"dtype": "CHAR(36)"},
-    "prices": {"dtype": "FLOAT",
-               "func": get_usd,
-               "trans": "price_usd"},
-
-}
-
-# COLTYPE = {
-#     "oracle_id": "CHAR(36)",
-#     "name": "TEXT",
-#     "mana_cost": "INT",
-#     "cmc": "INT",
-#     "type_line": "TEXT",
-#     "oracle_text": "TEXT",
-#     "legalities": "CHAR(22)",
-#     "set_id": "CHAR(36)",
-#     "prices": "FLOAT",
-# }
-
-# COLFUNCS = {
-#     "legalities": convert_legals,
-#     "prices": get_usd,
-# }
-
-# COLTRANS = {
-#     "prices": "price_usd",
-# }
-
-
 class Database(object):
     def __init__(self, dbdir):
         self.dbdir = dbdir
@@ -62,8 +24,8 @@ class Database(object):
         self.cursor = cursor
         self.tables = []
         self.set_table()
-        self.info = None
-        self.primary = None
+        self.defns = {}
+        self.primary = []
 
 
     def connect_db(self, dbdir):
@@ -87,42 +49,48 @@ class Database(object):
             self.tables.append(title)
         # Start exec string
         exec_str = f"CREATE TABLE IF NOT EXISTS {title} ("
-        cols = kw.pop("cols", COLSINFO)
-        col_list = []
+        tabledefn = kw.pop("defns", self.defns)
+        defn_list = []
+        prim_list = []
         # Go through provided cols
-        for i,(k,d) in enumerate(cols.items()):
+        for i,(k0,d) in enumerate(tabledefn.items()):
             v = d["dtype"]
-            k = self.info[k].get("trans", k)
-            if i == 0:
+            k = self.defns[k0].get("trans", k0)
+            defn_list.extend([f"{k} {v}"])
+            if self.defns[k0].get("primary", False):
+                prim_list.extend([f"{k}"])
+            elif i == 0:
                 self.set_primary(k)
-                col_list.extend([f"{k} {v} PRIMARY KEY"])
-            else:
-                col_list.extend([f"{k} {v}"])
+                prim_list.extend([f"{k}"])
         # Assemble col string
-        col_str = " ,".join(col_list)
-        exec_str += col_str + ")"
+        defn_str = " ,".join(defn_list)
+        prim_str = "PRIMARY KEY (" + ", ".join(prim_list)  + ")"
+        exec_str += defn_str + ", "+ prim_str + ")"
         return exec_str
 
     def genr8_insert_exec(self, table, ocols):
         if (table not in self.tables):
             raise Exception(f"Table {table} does not exist")
         istr = f"INSERT INTO {table} ("
-        istr += " ,".join(ocols) + ") "
+        istr += ", ".join(ocols) + ") "
         qs = ["?"] * len(ocols)
-        istr += "VALUES (" + " ,".join(qs) + ")"
+        istr += "VALUES (" + ", ".join(qs) + ")"
         return istr
 
     def insert2table(self, table, ocols, vals):
         input_str = self.genr8_insert_exec(table, ocols)
         # Insert data into table
         self.cursor.execute(input_str, vals)
-        # self.cursor.execute("INSERT INTO users (name, age) VALUES (?, ?)", ('Alice', 30))
         # Commit changes
         self.conn.commit()
 
-    def set_info(self, info, force = False):
-        if (not self.info or (self.info and force)):
-            self.info = info
+    def set_defns(self, defns, force = False):
+        if (not self.defns or (self.defns and force)):
+            self.defns = defns
+            for defn in defns:
+                pcol = self.defns[defn].get("primary", False)
+                if pcol:
+                    self.primary.append(defn)
 
     def set_table(self):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -135,7 +103,7 @@ class Database(object):
 
     def set_primary(self, col):
         if (not self.primary):
-            self.primary = col
+            self.primary.append(col)
 
     def close_db(self):
         # Close the cursor and connection
@@ -151,12 +119,12 @@ def fill_table(db, fjson, **kw):
         ocols = []
         for col in cols:
             v = entry.get(col, None)
-            if db.info[col].get("func"):
-                v = db.info[col].get("func")(v)
-            ocol = db.info[col].get("trans", col)
+            if db.defn[col].get("func"):
+                v = db.defn[col].get("func")(v)
+            ocol = db.defn[col].get("trans", col)
             vals.extend([v])
             ocols.extend([ocol])
-        if None in vals or None in ocols:
-            continue
-        else:
-            db.insert2table("cards", ocols, vals)
+        # if None in vals or None in ocols:
+        #     continue
+        # else:
+        db.insert2table("cards", ocols, vals)
