@@ -3,6 +3,7 @@
 import os
 import json
 import struct
+import datetime
 
 from functools import wraps
 
@@ -91,3 +92,10 @@ def convert_blegals(blegalities):
     for i in range(num_bits):
         unpacked_data.append(struct.unpack('?', blegalities[i // 8])[0] & (1 << (i % 8)) != 0)
     return unpacked_data
+
+def get_date():
+    today = datetime.datetime.now()
+    date_str = f"{today.year}-{today.month}-{today.day}"
+    return date_str
+
+

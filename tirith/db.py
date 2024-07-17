@@ -124,7 +124,4 @@ def fill_table(db, fjson, **kw):
             ocol = db.defn[col].get("trans", col)
             vals.extend([v])
             ocols.extend([ocol])
-        # if None in vals or None in ocols:
-        #     continue
-        # else:
         db.insert2table("cards", ocols, vals)
