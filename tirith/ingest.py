@@ -7,7 +7,7 @@ from subprocess import Popen,PIPE
 import time
 
 # Local imports
-from util import ensure_cwd, read_json
+from .util import ensure_cwd, read_json
 
 
 # Scryfall data list
@@ -53,7 +53,8 @@ def update_local_data(data_list=SFDATA, force=False):
         ingest_url(json_url, fout=f"bulk_data/{fout}.json")
         # Clean stub
         os.remove(f"bulk_data/{fout}")
+    return fout
 
 
 if __name__ == '__main__':
-    update_local_data(force=True)
+    _ = update_local_data(force=True)

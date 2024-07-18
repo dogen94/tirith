@@ -111,17 +111,27 @@ class Database(object):
         self.conn.close()
 
 
-def fill_table(db, fjson, **kw):
-    cols = kw.pop("cols", JSONCOLS)
+def fill_table(db, fjson, table, **kw):
+    cols = kw.pop("cols", db.defns.keys())
     jout = read_json(fjson)
+    addcols = kw.pop("addcols", {})
     for entry in jout:
         vals = []
         ocols = []
         for col in cols:
             v = entry.get(col, None)
-            if db.defn[col].get("func"):
-                v = db.defn[col].get("func")(v)
-            ocol = db.defn[col].get("trans", col)
+            # Run function hook
+            if db.defns[col].get("func"):
+                v = db.defns[col].get("func")(v)
+            # Run column key translation
+            ocol = db.defns[col].get("trans", col)
             vals.extend([v])
             ocols.extend([ocol])
-        db.insert2table("cards", ocols, vals)
+        # Check for additional cols
+        if addcols:
+            for addcol,addv in addcols:
+                vals.extend([addv])
+                ocols.extend([addcol])
+        db.insert2table(table, ocols, vals)
+
+

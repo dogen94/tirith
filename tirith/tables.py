@@ -1,4 +1,7 @@
+import datetime
+
 from .db import Database, fill_table
+from .ingest import update_local_data, SFDATA
 from .util import convert_legals, get_usd
 
 ORACLE_TABLE_DEFNS = {
@@ -33,8 +36,13 @@ def update_price_table():
     table_name = "prices"
     db = Database("db/oracle-prices.db")
     if table_name not in db.tables:
-        raise Exception(f"Table {}")
+        raise Exception(f"Table {table_name} doesn't exist")
     db.set_defns(PRICE_TABLE_DEFNS)
-    db.create_table(title="prices")
-
-    
+    # Get updated oracle cards data from scryfall
+    fout = update_local_data()
+    # Add time column
+    today = datetime.datetime.now()
+    date = f"{today.year}-{today.month}-{today.day}"
+    fill_kw = {"date": date}
+    # Fill table with data
+    fill_table(db, f"bulk_data/{fout}.json", "prices", **fill_kw)
