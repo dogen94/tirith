@@ -8,8 +8,6 @@ import time
 
 # Local imports
 from .util import ensure_cwd, read_json
-from .tables import update_price_table
-
 
 
 # Scryfall data list
@@ -56,8 +54,3 @@ def update_local_data(data_list=SFDATA, force=False):
         # Clean stub
         os.remove(f"bulk_data/{fout}")
     return fout
-
-
-if __name__ == '__main__':
-    _ = update_local_data(force=True)
-    update_price_table()
