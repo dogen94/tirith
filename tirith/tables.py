@@ -12,6 +12,7 @@ ORACLE_TABLE_DEFNS = {
     "cmc": {"dtype": "INT"},
     "type_line": {"dtype": "TEXT"},
     "oracle_text": {"dtype": "TEXT"},
+    "rarity": {"dtype": "TEXT"},
     "legalities": {"dtype": "CHAR(22)",
                    "func": convert_legals},
     "set_id": {"dtype": "CHAR(36)"},
