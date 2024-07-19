@@ -2,7 +2,8 @@ import datetime
 
 from .db import Database, fill_table
 from .ingest import update_local_data, SFDATA
-from .util import convert_legals, get_usd
+from .util import convert_legals, get_usd, ensure_cwd, FDIR
+
 
 ORACLE_TABLE_DEFNS = {
     "oracle_id": {"dtype": "CHAR(36)",
@@ -32,7 +33,7 @@ PRICE_TABLE_DEFNS = {
              "primary": True}
 }
 
-
+@ensure_cwd(ddir=FDIR)
 def update_price_table():
     table_name = "prices"
     db = Database("db/oracle-prices.db")

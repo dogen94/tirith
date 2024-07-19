@@ -7,7 +7,7 @@ from subprocess import Popen,PIPE
 import time
 
 # Local imports
-from .util import ensure_cwd, read_json
+from .util import ensure_cwd, read_json, FDIR
 
 
 # Scryfall data list
@@ -16,8 +16,7 @@ SFDATA = [
 ]
 # Scryfall address
 SFADDR = 'https://api.scryfall.com/bulk-data/'
-# Get absolute parent path to __file__
-FDIR = Path(__file__).absolute().parent
+
 
 @ensure_cwd(ddir=FDIR)
 # Get scryfall data
@@ -37,7 +36,7 @@ def ingest_url(url, **kw):
     if stderr:
         raise Exception(stderr)
 
-
+@ensure_cwd(ddir=FDIR)
 def update_local_data(data_list=SFDATA, force=False):
     today = datetime.datetime.now()
     for data in data_list:

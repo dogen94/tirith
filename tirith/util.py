@@ -4,6 +4,8 @@ import os
 import json
 import struct
 import datetime
+from pathlib import Path
+
 
 from functools import wraps
 
@@ -33,18 +35,23 @@ LEGALITIES = [
   'predh',
 ]
 
+# Get absolute parent path to __file__
+FDIR = Path(__file__).absolute().parent.parent
+
 
 def ensure_cwd(*a, **kw):
+    # Get desired dir
+    ddir = kw.pop("ddir", None)
     def wrap(func):
         @wraps(func)
         def func_wrapper(*a, **kw):
             # Store cwd
             cwd = os.getcwd()
-            # Get desired dir
-            ddir = kw.pop("ddir", None)
+            breakpoint()
             # Go to ddir
             if ddir:
                 os.chdir(ddir)
+            breakpoint()
             # Run func
             fout = func(*a, **kw)
             # Return back to cwd
