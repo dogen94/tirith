@@ -47,11 +47,9 @@ def ensure_cwd(*a, **kw):
         def func_wrapper(*a, **kw):
             # Store cwd
             cwd = os.getcwd()
-            breakpoint()
             # Go to ddir
             if ddir:
                 os.chdir(ddir)
-            breakpoint()
             # Run func
             fout = func(*a, **kw)
             # Return back to cwd
