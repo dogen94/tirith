@@ -35,6 +35,24 @@ LEGALITIES = [
   'predh',
 ]
 
+
+
+PLAY_BOOSTER = {
+    "cards" : {
+        "num": 14,
+        "common": 6,
+        "uncommon": 3,
+        "raythic": 1,
+        "land": 1,
+        "wildcard": 2,
+        "misc": 1,
+    },
+    "odds" : {
+        "rare": 87.5/100.0,
+        "mythic": 12.5/100.0,
+    }
+}
+
 # Get absolute parent path to __file__
 FDIR = Path(__file__).absolute().parent.parent
 
