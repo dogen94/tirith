@@ -1,9 +1,10 @@
-import tensorflow as tf
+# import tensorflow as tf
 import pandas as pd
 import numpy as np
-import keras
-from sklearn.preprocessing import OneHotEncoder
+# import keras
+# from sklearn.preprocessing import OneHotEncoder
 import tirith.db
+from tirith.util import STANDARD_SETS
 
 
 def build_and_compile_model():
@@ -22,17 +23,24 @@ def build_and_compile_model():
     return model
 
 
-# Murders at Karlov Manor set id
-setid = "2b17794b-15c3-4796-ad6f-0887a0eceeca"
 
 # Try basic neural network
 def example_dnn():
     # Read in oracle-db
     db = tirith.db.Database("db/oracle-card.db")
-    
+    # Values of set ids
+    setids = []
+    setq = []
+    for set,setid in STANDARD_SETS.items():
+        setids.append(setid)
+        setq.append("?")
+    setids = tuple(setids)
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
     # Get rarity of these cards
-    exec_str = "SELECT oracle_id,rarity,price_usd FROM cards WHERE set_id=" + f"'{setid}'" 
-    db.cursor.execute(exec_str)
+    exec_str = "SELECT * FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
 
 
     # Read in training data
