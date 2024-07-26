@@ -86,9 +86,6 @@ def estimate_booster_price(setid, nsim=50000):
     prices = np.empty(nsim)
     for i in range(nsim):
         prices[i] = sim_pack(commons, uncommons, rares, mythics, allcards)
-
-    expectation_per_booster = np.mean(prices)
-    # expectation_per_bbox = expectation_per_booster * 36.0
     return prices
 
 
@@ -115,7 +112,7 @@ print(f"Estimated {100 *(1 - cdf[I[0][0]]):4.2f}% probability of profit buying 3
 # plt.show()
 
 
-# if __name__ == "__main__":
-#     _ = update_local_data(force=True)
-#     update_price_table()
+if __name__ == "__main__":
+    _ = update_local_data(force=True)
+    update_price_table()
 
