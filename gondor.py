@@ -5,6 +5,7 @@ import numpy as np
 # from sklearn.preprocessing import OneHotEncoder
 import tirith.db
 from tirith.util import STANDARD_SETS
+from tirith.tables import ORACLE_TABLE_DEFNS
 
 
 def build_and_compile_model():
@@ -24,6 +25,56 @@ def build_and_compile_model():
 
 
 
+# Explore the data
+def feature_selection():
+    # Read in oracle-db
+    db = tirith.db.Database("db/oracle-card.db")
+    # Values of set ids
+    setids = []
+    setq = []
+    for set,setid in STANDARD_SETS.items():
+        setids.append(setid)
+        setq.append("?")
+    setids = tuple(setids)
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
+    # Get rarity of these cards
+    exec_str = "SELECT * FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
+    db.set_defns(ORACLE_TABLE_DEFNS)
+    data_arr = np.array(data)
+
+    # Feature investigations
+    # Is there a strongest color
+    colors = data_arr[:,2]
+    prices = data_arr[:,9]
+    I = np.zeros((len(colors), 5), dtype=bool)
+    for i,card in enumerate(colors):
+        if card == '' or card is None:
+            continue
+        for j,color in enumerate(("R", "G", "B", "W", "U")):
+            if color in card:
+                I[i,j] = 1
+        if prices[i] is None:
+            prices[i] = np.NAN
+
+    rmean = np.nanmean(prices[I[:,0]])
+    gmean = np.nanmean(prices[I[:,1]])
+    bmean = np.nanmean(prices[I[:,2]])
+    wmean = np.nanmean(prices[I[:,3]])
+    umean = np.nanmean(prices[I[:,4]])
+
+    plt.scatter(np.arange(5), (rmean,gmean,bmean,wmean,umean))
+    plt.show()
+
+    plt.hist(prices[I[:,0]], bins=30, color='red', alpha=0.3)
+    plt.hist(prices[I[:,1]], bins=30, color='green', alpha=0.3)
+    plt.hist(prices[I[:,2]], bins=30, color='black', alpha=0.3)
+    plt.hist(prices[I[:,3]], bins=30, color='yellow', alpha=0.3)
+    plt.hist(prices[I[:,4]], bins=30, color='blue', alpha=0.3)
+    plt.show()
+
 # Try basic neural network
 def example_dnn():
     # Read in oracle-db
@@ -41,7 +92,10 @@ def example_dnn():
     exec_str = "SELECT * FROM cards WHERE set_id IN (" + setq + ")" 
     db.cursor.execute(exec_str, setids)
     data = db.cursor.fetchall()
+    db.set_defns(ORACLE_TABLE_DEFNS)
+    data_arr = np.array(data)
 
+    # Random feature investigations
 
     # Read in training data
     train_data_dir = "data/train.csv"
@@ -131,4 +185,5 @@ def example_dnn():
     preds = dnn.predict(test_all)
 
 
-example_dnn()
+feature_selection()
+# example_dnn()
