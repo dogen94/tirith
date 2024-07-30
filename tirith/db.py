@@ -10,6 +10,10 @@ JSONCOLS = [
     "mana_cost",
     "cmc",
     "type_line",
+    "colors",
+    "power",
+    "toughness",
+    "keywords",
     "oracle_text",
     "legalities",
     "set_id",
@@ -120,6 +124,10 @@ def fill_table(db, fjson, table, **kw):
         ocols = []
         for col in cols:
             v = entry.get(col, None)
+            if v == [] or v == "":
+                v = None;
+            if isinstance(v, list):
+                v = ",".join(v)
             # Run function hook
             if db.defns[col].get("func"):
                 v = db.defns[col].get("func")(v)
