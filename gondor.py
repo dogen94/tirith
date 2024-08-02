@@ -75,10 +75,24 @@ def feature_selection():
     plt.hist(prices[I[:,4]], bins=30, color='blue', alpha=0.3)
     plt.show()
 
+
+GBTM_INPUTS = [
+    "mana_cost",
+    "cmc",
+    "type_line",
+    "colors",
+    "power",
+    "toughness",
+    "rarity",
+]
+
+GBTM_OUT = "price_usd"
+
 # Try basic neural network
-def example_dnn():
+def gbtm():
     # Read in oracle-db
     db = tirith.db.Database("db/oracle-card.db")
+    db.set_defns(ORACLE_TABLE_DEFNS)
     # Values of set ids
     setids = []
     setq = []
@@ -88,102 +102,83 @@ def example_dnn():
     setids = tuple(setids)
     # Build tuple of question marks to match all setids
     setq = ",".join(setq)
-    # Get rarity of these cards
-    exec_str = "SELECT * FROM cards WHERE set_id IN (" + setq + ")" 
+    # Build sql query string
+    cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
+        # Get rarity of these cards
+    exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
     db.cursor.execute(exec_str, setids)
     data = db.cursor.fetchall()
-    db.set_defns(ORACLE_TABLE_DEFNS)
-    data_arr = np.array(data)
 
-    # Random feature investigations
+    # Number of trials in autotuner
+    TUNER_TRIALS=100
+    all_cols = [*GBTM_INPUTS, GBTM_OUT]
+    train_data_df = pd.DataFrame(np.array(data), columns=all_cols)
+    # train_data_df = pd.read_csv(train_data_dir)
 
-    # Read in training data
-    train_data_dir = "data/train.csv"
-    train_data_df = pd.read_csv(train_data_dir)
-
-    # Drop id column
-    train_data_df = train_data_df.drop("Id", axis=1)
-
+    # Drop price column
+    train_data_df = train_data_df.drop("price_usd", axis=1)
 
     # Split data set to test and training data
-    def split_dataset(dataset, test_ratio=0.30):
+    def split_dataset(dataset, test_ratio=0.35):
         test_indices = np.random.rand(len(dataset)) < test_ratio
         return dataset[~test_indices], dataset[test_indices]
 
-    # Get split dataframe
-    train_ds_pd = train_data_df
+
+    # Get split dataframe (65/35)
+    train_ds_pd, valid_test_ds_pd = split_dataset(train_data_df)
+    # Split valid and test (25/10)
+    valid_ds_pd, test_ds_pd = split_dataset(train_data_df, test_ratio=0.285)
 
 
-    enc = OneHotEncoder(handle_unknown='ignore')
+    # Loading pd dataframe into tf dataset
+    label = 'price_usd'
+    train_ds = tfdf.keras.pd_dataframe_to_tf_dataset(train_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
+    valid_ds = tfdf.keras.pd_dataframe_to_tf_dataset(valid_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
 
-    # Post process data, only keep numbers
-    num_cols = []
-    obj_cols = []
-    for k in train_ds_pd.dtypes.keys():
-        dt = train_ds_pd.dtypes[k]
-        if (dt == 'int64' or dt == 'float64'):
-            num_cols.append(k)
-        else:
-            obj_cols.append(k)
 
-    # Preprocess numerical data 
-    # Set NANs to mean of data
-    train_np = train_ds_pd[num_cols].to_numpy()
-    for i in range(train_np.shape[-1]):
-        mean = np.nanmean(train_np[:,i])
-        train_np[:,i] = np.nan_to_num(train_np[:,i], mean)
 
-    # Preprocess non-numerical data
-    train_obj = train_ds_pd[obj_cols].to_numpy()
-    enc.fit(train_obj)
-    train_obj_np = enc.transform(train_obj).toarray()
-    n_obj = train_obj_np.shape[-1]
-    # Combine preprocessed data of all types
-    train_all = np.hstack([train_obj_np, train_np])
+    tuner = tfdf.tuner.RandomSearch(num_trials=TUNER_TRIALS,
+                                    use_predefined_hps=True,
+                                    trial_num_threads=20)
 
-    callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss',
-        patience=10,
-        mode='auto',
-        restore_best_weights=True,
-        start_from_epoch=0
-    )
 
-    dnn = build_and_compile_model()
+    # Start with random forest model, Use top ranking hyper parameters
+    rf = tfdf.keras.GradientBoostedTreesModel(
+        num_threads=16,
+        tuner=tuner,
+        task = tfdf.keras.Task.REGRESSION)
+    rf.compile(metrics=["mae"]) # Optional, you can use this to include a lis of eval metrics
     with tf.device('/device:GPU: 0'): 
         # Train model on gpu
-        dnn.fit(train_all[:,:-1], train_all[:,-1], epochs=200, shuffle=True,
-                validation_split=0.25, callbacks=[callback])
+        rf.fit(x=train_ds, verbose=1)
 
+    # Model plotter
+    # tfdf.model_plotter.plot_model_in_colab(rf, tree_idx=0, max_depth=3)
 
-    # Save model
-    dnn.save('models/dnn_set3_mae.keras')
-    # Submission prediction
+    # # Evaluate model on validation
+    evaluation = rf.evaluate(x=valid_ds,return_dict=True)
+
+    tuning_logs = rf.make_inspector().tuning_logs()
+    T = tuning_logs[tuning_logs.best].iloc[0]
+    T.to_csv("models/autotune_gbmt-%itrials.csv" % TUNER_TRIALS)
+
+    # Predict on test data
     test_file_path = "data/test.csv"
     test_data = pd.read_csv(test_file_path)
     ids = test_data.pop('Id')
 
-    # Set NANs to mean of data
-    test_np = test_data[num_cols[:-1]].to_numpy()
-    for i in range(test_np.shape[-1]-1):
-        mean = np.nanmean(test_np[:,i])
-        test_np[:,i] = np.nan_to_num(test_np[:,i], mean)
+    test_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
+        test_data,
+        task = tfdf.keras.Task.REGRESSION)
 
-    test_obj = test_data[obj_cols].to_numpy()
-    test_obj_np = enc.transform(test_obj).toarray()
-    test_all = np.hstack([test_obj_np, test_np])
+    preds = rf.predict(test_ds)
+    output = pd.DataFrame({'Id': ids,
+                        'SalePrice': preds.squeeze()})
 
+    sample_submission_df = pd.read_csv('data/sample_submission.csv')
+    sample_submission_df['SalePrice'] = rf.predict(test_ds)
+    sample_submission_df.to_csv('working/submission_gbtm_mae_autotune-%itrials.csv' % TUNER_TRIALS, index=False)
+    sample_submission_df.head()
 
-    def loss(target_y, predicted_y):
-        return tf.reduce_mean(tf.square(target_y - predicted_y))
-
-    def maeloss(target_y, predicted_y):
-        return tf.reduce_mean(tf.abs(target_y - predicted_y))
-
-    print("Current loss: %1.6f" % loss(dnn(train_all[:,:-1]), train_all[:,-1]).numpy())
-    
-    preds = dnn.predict(test_all)
-
-
-feature_selection()
-# example_dnn()
+# feature_selection()
+gbtm()
