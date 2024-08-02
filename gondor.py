@@ -1,28 +1,12 @@
-# import tensorflow as tf
+import tensorflow as tf
+import tensorflow_decision_forests as tfdf
 import pandas as pd
 import numpy as np
-# import keras
-# from sklearn.preprocessing import OneHotEncoder
+import keras
+from sklearn.preprocessing import OneHotEncoder
 import tirith.db
 from tirith.util import STANDARD_SETS
 from tirith.tables import ORACLE_TABLE_DEFNS
-
-
-def build_and_compile_model():
-    model = keras.Sequential([
-        tf.keras.layers.Dense(10000, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(0.001)),
-        tf.keras.layers.Dense(10000, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(0.001)),
-        tf.keras.layers.Dense(10000, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(0.001)),
-        tf.keras.layers.Dense(1)
-    ])
-
-    model.compile(loss='mean_absolute_error',
-                    optimizer=tf.keras.optimizers.Adam(0.001))
-    return model
-
 
 
 # Explore the data
@@ -89,7 +73,7 @@ GBTM_INPUTS = [
 GBTM_OUT = "price_usd"
 
 # Try basic neural network
-def gbtm():
+def train_gbtm():
     # Read in oracle-db
     db = tirith.db.Database("db/oracle-card.db")
     db.set_defns(ORACLE_TABLE_DEFNS)
@@ -108,6 +92,14 @@ def gbtm():
     exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
     db.cursor.execute(exec_str, setids)
     data = db.cursor.fetchall()
+    data_arr = np.array(data)
+
+    # Preprocess power/toughness (switch * to -1)
+    for i in range(data_arr.shape[0]):
+        if data_arr[i, 4] == "*":
+            data_arr[i, 4] = -1
+        if data_arr[i, 5] == "*":
+            data_arr[i, 5] = -1
 
     # Number of trials in autotuner
     TUNER_TRIALS=100
@@ -116,7 +108,9 @@ def gbtm():
     # train_data_df = pd.read_csv(train_data_dir)
 
     # Drop price column
-    train_data_df = train_data_df.drop("price_usd", axis=1)
+    # train_data_df = train_data_df.drop("price_usd", axis=1)
+
+    
 
     # Split data set to test and training data
     def split_dataset(dataset, test_ratio=0.35):
@@ -152,33 +146,32 @@ def gbtm():
         # Train model on gpu
         rf.fit(x=train_ds, verbose=1)
 
-    # Model plotter
-    # tfdf.model_plotter.plot_model_in_colab(rf, tree_idx=0, max_depth=3)
-
     # # Evaluate model on validation
     evaluation = rf.evaluate(x=valid_ds,return_dict=True)
 
+    # Just save model for now
     tuning_logs = rf.make_inspector().tuning_logs()
     T = tuning_logs[tuning_logs.best].iloc[0]
     T.to_csv("models/autotune_gbmt-%itrials.csv" % TUNER_TRIALS)
 
     # Predict on test data
-    test_file_path = "data/test.csv"
-    test_data = pd.read_csv(test_file_path)
-    ids = test_data.pop('Id')
+    # test_file_path = "data/test.csv"
+    # test_data = pd.read_csv(test_file_path)
+    # ids = test_data.pop('Id')
+    ids = test_ds_pd.pop('oracle_id')
 
     test_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
-        test_data,
+        test_ds_pd,
         task = tfdf.keras.Task.REGRESSION)
 
     preds = rf.predict(test_ds)
-    output = pd.DataFrame({'Id': ids,
-                        'SalePrice': preds.squeeze()})
+    output = pd.DataFrame({'oracle_id': ids,
+                        'price_usd': preds.squeeze()})
 
-    sample_submission_df = pd.read_csv('data/sample_submission.csv')
-    sample_submission_df['SalePrice'] = rf.predict(test_ds)
+    sample_submission_df = pd.read_csv('data/prediction.csv')
+    sample_submission_df['price_usd'] = rf.predict(test_ds)
     sample_submission_df.to_csv('working/submission_gbtm_mae_autotune-%itrials.csv' % TUNER_TRIALS, index=False)
     sample_submission_df.head()
 
 # feature_selection()
-gbtm()
+train_gbtm()
