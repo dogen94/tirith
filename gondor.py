@@ -88,12 +88,13 @@ def train_gbtm():
     setq = ",".join(setq)
     # Build sql query string
     cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
-        # Get rarity of these cards
+    # Get desired cols of these cards
     exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
     db.cursor.execute(exec_str, setids)
     data = db.cursor.fetchall()
+    # Build numpy array out of data
     data_arr = np.array(data)
-
+    # Mask to remove any data w/o prices
     Iprice = np.ones(data_arr.shape[0], dtype=bool)
     # Preprocess the data
     for i in range(data_arr.shape[0]):
@@ -139,43 +140,35 @@ def train_gbtm():
         if isinstance(data_arr[i, 7], type(None)):
             data_arr[i, 5] = np.NaN
 
-
     # Number of trials in autotuner
     TUNER_TRIALS=100
     all_cols = [*GBTM_INPUTS, GBTM_OUT]
     train_data_df0 = pd.DataFrame(data_arr[Iprice,:], columns=all_cols)
     # Fix dtypes
     train_data_df = train_data_df0.convert_dtypes()
-    # Drop price column
-    # train_data_df = train_data_df.drop("price_usd", axis=1)
-
 
     # # Save the preprocessed data for import next time
     # train_data_df.to_csv()
-
 
     # Split data set to test and training data
     def split_dataset(dataset, test_ratio=0.35):
         test_indices = np.random.rand(len(dataset)) < test_ratio
         return dataset[~test_indices], dataset[test_indices]
 
-
     # Get split dataframe (65/35)
     train_ds_pd, valid_test_ds_pd = split_dataset(train_data_df)
     # Split valid and test (25/10)
     valid_ds_pd, test_ds_pd = split_dataset(train_data_df, test_ratio=0.285)
-
 
     # Loading pd dataframe into tf dataset
     label = 'price_usd'
     train_ds = tfdf.keras.pd_dataframe_to_tf_dataset(train_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
     valid_ds = tfdf.keras.pd_dataframe_to_tf_dataset(valid_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
 
-
+    # Set hyperparameter tuner
     tuner = tfdf.tuner.RandomSearch(num_trials=TUNER_TRIALS,
                                     use_predefined_hps=True,
                                     trial_num_threads=20)
-
 
     # Start with random forest model, Use top ranking hyper parameters
     rf = tfdf.keras.GradientBoostedTreesModel(
@@ -195,24 +188,17 @@ def train_gbtm():
     T = tuning_logs[tuning_logs.best].iloc[0]
     T.to_csv("models/autotune_gbmt-%itrials.csv" % TUNER_TRIALS)
 
-    # Predict on test data
-    # test_file_path = "data/test.csv"
-    # test_data = pd.read_csv(test_file_path)
-    # ids = test_data.pop('Id')
-    ids = test_ds_pd.pop('oracle_id')
-
+    # Load test dataframe into keras ds
     test_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
         test_ds_pd,
         task = tfdf.keras.Task.REGRESSION)
-
+    # Predict the prices
     preds = rf.predict(test_ds)
-    output = pd.DataFrame({'oracle_id': ids,
-                        'price_usd': preds.squeeze()})
-
-    sample_submission_df = pd.read_csv('data/prediction.csv')
-    sample_submission_df['price_usd'] = rf.predict(test_ds)
-    sample_submission_df.to_csv('working/submission_gbtm_mae_autotune-%itrials.csv' % TUNER_TRIALS, index=False)
-    sample_submission_df.head()
+    # Get actual prices of prediction
+    test_prices = test_ds_pd["price_usd"].to_numpy()
+    # Mean square error
+    mse = np.mean((preds - test_prices)**2) / len(test_prices)
+    print(mse)
 
 # feature_selection()
 train_gbtm()
