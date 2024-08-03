@@ -65,8 +65,8 @@ GBTM_INPUTS = [
     "cmc",
     "type_line",
     "colors",
-    # "power",
-    # "toughness",
+    "power",
+    "toughness",
     "rarity",
 ]
 
@@ -94,41 +94,65 @@ def train_gbtm():
     data = db.cursor.fetchall()
     data_arr = np.array(data)
 
-
-    # Sanitize the data
+    Iprice = np.ones(data_arr.shape[0], dtype=bool)
+    # Preprocess the data
     for i in range(data_arr.shape[0]):
+        # Sanitize prices
+        if isinstance(data_arr[i, 7], type(None)):
+            Iprice[i] = False
         # Sanitize mana_cost
+        # Remove the brackets in the mana_cost and sort to remove uniqueness
         if isinstance(data_arr[i, 0], str):
-            data_arr[i, 0] = data_arr[i, 0].replace("{","").replace("}","")
-        # # Sanitize power
-        # if data_arr[i, 4] == "*":
-        #     if not isinstance(data_arr[i, 4], int):
-        #         print(data_arr[i, 4])
-        #     data_arr[i, 4] = -1
-        # # Sanitize toughness
-        # if data_arr[i, 5] == "*":
-        #     data_arr[i, 5] = -1
+            tmp = data_arr[i, 0].replace("{","").replace("}","")
+            data_arr[i, 0] = "".join(sorted(tmp))
+        # Set None mana_cost to 0
+        elif isinstance(data_arr[i, 0], type(None)):
+            data_arr[i, 0] = "0"
 
-    # Preprocess power/toughness (switch * to -1)
-    # for i in range(data_arr.shape[0]):
-    #     if data_arr[i, 4] == "*":
-    #         data_arr[i, 4] = -1
-    #     if data_arr[i, 5] == "*":
-    #         data_arr[i, 5] = -1
+        # Sanitize colors
+        # Remove the comma in the colors and sort to remove uniqueness
+        if isinstance(data_arr[i, 3], str):
+            tmp = data_arr[i, 3].replace(",","")
+            data_arr[i, 3] = "".join(sorted(tmp))
+        # Set None mana_cost to 0
+        elif isinstance(data_arr[i, 3], type(None)):
+            r""" Maybe create seperate land and artifacts here?"""
+            data_arr[i, 3] = "0"
+
+        # Sanitize power
+        # Set * to -1 and None to -2
+        if isinstance(data_arr[i, 4], type(None)):
+            data_arr[i, 4] = -2
+        elif isinstance(data_arr[i, 4], str):
+            if "*" in data_arr[i, 4]:
+                data_arr[i, 4] = -1
+
+        # Sanitize toughness
+        # Set * to -1 and None to -2
+        if isinstance(data_arr[i, 5], type(None)):
+            data_arr[i, 5] = -2
+        elif isinstance(data_arr[i, 5], str):
+            if "*" in data_arr[i, 5]:
+                data_arr[i, 5] = -1
+        
+        # Sanitize prices
+        if isinstance(data_arr[i, 7], type(None)):
+            data_arr[i, 5] = np.NaN
+
 
     # Number of trials in autotuner
     TUNER_TRIALS=100
     all_cols = [*GBTM_INPUTS, GBTM_OUT]
-    train_data_df = pd.DataFrame(data_arr, columns=all_cols)
-    # train_data_df = pd.read_csv(train_data_dir)
-    # train_data_df["power"] = pd.to_numeric(train_data_df['power'], errors='coerce')
-    # train_data_df["toughness"] = pd.to_numeric(train_data_df['toughness'], errors='coerce')
-
-
+    train_data_df0 = pd.DataFrame(data_arr[Iprice,:], columns=all_cols)
+    # Fix dtypes
+    train_data_df = train_data_df0.convert_dtypes()
     # Drop price column
     # train_data_df = train_data_df.drop("price_usd", axis=1)
 
-    
+
+    # # Save the preprocessed data for import next time
+    # train_data_df.to_csv()
+
 
     # Split data set to test and training data
     def split_dataset(dataset, test_ratio=0.35):
@@ -146,7 +170,6 @@ def train_gbtm():
     label = 'price_usd'
     train_ds = tfdf.keras.pd_dataframe_to_tf_dataset(train_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
     valid_ds = tfdf.keras.pd_dataframe_to_tf_dataset(valid_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
-
 
 
     tuner = tfdf.tuner.RandomSearch(num_trials=TUNER_TRIALS,
