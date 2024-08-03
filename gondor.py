@@ -65,8 +65,8 @@ GBTM_INPUTS = [
     "cmc",
     "type_line",
     "colors",
-    "power",
-    "toughness",
+    # "power",
+    # "toughness",
     "rarity",
 ]
 
@@ -94,18 +94,36 @@ def train_gbtm():
     data = db.cursor.fetchall()
     data_arr = np.array(data)
 
-    # Preprocess power/toughness (switch * to -1)
+
+    # Sanitize the data
     for i in range(data_arr.shape[0]):
-        if data_arr[i, 4] == "*":
-            data_arr[i, 4] = -1
-        if data_arr[i, 5] == "*":
-            data_arr[i, 5] = -1
+        # Sanitize mana_cost
+        if isinstance(data_arr[i, 0], str):
+            data_arr[i, 0] = data_arr[i, 0].replace("{","").replace("}","")
+        # # Sanitize power
+        # if data_arr[i, 4] == "*":
+        #     if not isinstance(data_arr[i, 4], int):
+        #         print(data_arr[i, 4])
+        #     data_arr[i, 4] = -1
+        # # Sanitize toughness
+        # if data_arr[i, 5] == "*":
+        #     data_arr[i, 5] = -1
+
+    # Preprocess power/toughness (switch * to -1)
+    # for i in range(data_arr.shape[0]):
+    #     if data_arr[i, 4] == "*":
+    #         data_arr[i, 4] = -1
+    #     if data_arr[i, 5] == "*":
+    #         data_arr[i, 5] = -1
 
     # Number of trials in autotuner
     TUNER_TRIALS=100
     all_cols = [*GBTM_INPUTS, GBTM_OUT]
-    train_data_df = pd.DataFrame(np.array(data), columns=all_cols)
+    train_data_df = pd.DataFrame(data_arr, columns=all_cols)
     # train_data_df = pd.read_csv(train_data_dir)
+    # train_data_df["power"] = pd.to_numeric(train_data_df['power'], errors='coerce')
+    # train_data_df["toughness"] = pd.to_numeric(train_data_df['toughness'], errors='coerce')
+
 
     # Drop price column
     # train_data_df = train_data_df.drop("price_usd", axis=1)
