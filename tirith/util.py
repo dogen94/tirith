@@ -54,9 +54,9 @@ PLAY_BOOSTER = {
 
 # Standard legal setids
 STANDARD_SETS = {
-    "mat": "6727e43d-31b6-45b0-ae05-7a811ba72f70",
-    "mom": "392f7315-dc53-40a3-a2cc-5482dbd498b3",
-    "one": "04bef644-343f-4230-95ee-255f29aa67a2",
+    # "mat": "6727e43d-31b6-45b0-ae05-7a811ba72f70",
+    # "mom": "392f7315-dc53-40a3-a2cc-5482dbd498b3",
+    # "one": "04bef644-343f-4230-95ee-255f29aa67a2",
     "bro": "4219a14e-6701-4ddd-a185-21dc054ab19b",
     "dmu": "4e47a6cd-cdeb-4b0f-8f24-cfe1a0127cb3",
     "woe": "79139661-13ee-43c4-8bad-a8c069f1a1df",
@@ -64,6 +64,8 @@ STANDARD_SETS = {
     "otj": "55a85ebe-644e-4bef-8be8-5290408be3d1",
     "mkm": "2b17794b-15c3-4796-ad6f-0887a0eceeca",
 }
+
+BLOOMBURROW_SETID = "a2f58272-bba6-439d-871e-7a46686ac018"
 
 # Get absolute parent path to __file__
 FDIR = Path(__file__).absolute().parent.parent

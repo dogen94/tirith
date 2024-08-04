@@ -60,6 +60,7 @@ def feature_selection():
     plt.show()
 
 
+
 GBTM_INPUTS = [
     "mana_cost",
     "cmc",
@@ -72,7 +73,7 @@ GBTM_INPUTS = [
 
 GBTM_OUT = "price_usd"
 
-# Try basic neural network
+# Try basic decision forest
 def train_gbtm():
     # Read in oracle-db
     db = tirith.db.Database("db/oracle-card.db")
@@ -136,10 +137,6 @@ def train_gbtm():
             if "*" in data_arr[i, 5]:
                 data_arr[i, 5] = -1
         
-        # Sanitize prices
-        if isinstance(data_arr[i, 7], type(None)):
-            data_arr[i, 5] = np.NaN
-
     # Number of trials in autotuner
     TUNER_TRIALS=100
     all_cols = [*GBTM_INPUTS, GBTM_OUT]
@@ -180,6 +177,178 @@ def train_gbtm():
         # Train model on gpu
         rf.fit(x=train_ds, verbose=1)
 
+    # # Evaluate model on validation÷turn_dict=True)
+
+    setq = ["?"]
+    setids = tuple( [tirith.util.BLOOMBURROW_SETID] )
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
+    # Build sql query string
+    cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
+    # Get desired cols of these cards
+    exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
+    # Build numpy array out of data
+    data_arr = np.array(data)
+
+    # Mask to remove any data w/o prices
+    Iprice1 = np.ones(data_arr.shape[0], dtype=bool)
+    # Preprocess the data
+    for i in range(data_arr.shape[0]):
+        # Sanitize prices
+        if isinstance(data_arr[i, 7], type(None)):
+            Iprice1[i] = False
+
+        # Sanitize mana_cost
+        # Remove the brackets in the mana_cost and sort to remove uniqueness
+        if isinstance(data_arr[i, 0], str):
+            tmp = data_arr[i, 0].replace("{","").replace("}","")
+            data_arr[i, 0] = "".join(sorted(tmp))
+        # Set None mana_cost to 0
+        elif isinstance(data_arr[i, 0], type(None)):
+            data_arr[i, 0] = "0"
+
+        # Sanitize colors
+        # Remove the comma in the colors and sort to remove uniqueness
+        if isinstance(data_arr[i, 3], str):
+            tmp = data_arr[i, 3].replace(",","")
+            data_arr[i, 3] = "".join(sorted(tmp))
+        # Set None mana_cost to 0
+        elif isinstance(data_arr[i, 3], type(None)):
+            r""" Maybe create seperate land and artifacts here?"""
+            data_arr[i, 3] = "0"
+
+        # Sanitize power
+        # Set * to -1 and None to -2
+        if isinstance(data_arr[i, 4], type(None)):
+            data_arr[i, 4] = -2
+        elif isinstance(data_arr[i, 4], str):
+            if "*" in data_arr[i, 4]:
+                data_arr[i, 4] = -1
+
+        # Sanitize toughness
+        # Set * to -1 and None to -2
+        if isinstance(data_arr[i, 5], type(None)):
+            data_arr[i, 5] = -2
+        elif isinstance(data_arr[i, 5], str):
+            if "*" in data_arr[i, 5]:
+                data_arr[i, 5] = -1
+
+    test_prices = data_arr[:,-1]
+
+    all_cols = [*GBTM_INPUTS, GBTM_OUT]
+    test_data_df0 = pd.DataFrame(data_arr, columns=all_cols)
+    # Fix dtypes
+    test_data_df = test_data_df0.convert_dtypes()
+    test_data_df.pop("price_usd")
+
+    # Load test dataframe into keras ds
+    test_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
+        test_data_df,
+        task = tfdf.keras.Task.REGRESSION)
+    # Predict the prices
+    preds = rf.predict(test_ds)
+    # Get actual prices of prediction
+    # test_prices = test_data_df["price_usd"].to_numpy()
+    # Mean square error
+    mse = np.mean((preds[Iprice1,0] - test_prices[Iprice1])**2) / len(test_prices[Iprice1])
+    print(mse)
+
+
+def predict_gbtm(set_tars, gbtm):
+    # Read in oracle-db
+    db = tirith.db.Database("db/oracle-card.db")
+    db.set_defns(ORACLE_TABLE_DEFNS)
+    # Values of set ids
+    setids = []
+    setq = []
+    # Get bloomburrow data
+    for set,setid in set_tars.items():
+        setids.append(setid)
+        setq.append("?")
+    setids = tuple(setids)
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
+    # Build sql query string
+    cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
+    # Get desired cols of these cards
+    exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
+    # Build numpy array out of data
+    data_arr = np.array(data)
+    
+    # Preprocess the data
+    for i in range(data_arr.shape[0]):
+        # Sanitize mana_cost
+        # Remove the brackets in the mana_cost and sort to remove uniqueness
+        if isinstance(data_arr[i, 0], str):
+            tmp = data_arr[i, 0].replace("{","").replace("}","")
+            data_arr[i, 0] = "".join(sorted(tmp))
+        # Set None mana_cost to 0
+        elif isinstance(data_arr[i, 0], type(None)):
+            data_arr[i, 0] = "0"
+
+        # Sanitize colors
+        # Remove the comma in the colors and sort to remove uniqueness
+        if isinstance(data_arr[i, 3], str):
+            tmp = data_arr[i, 3].replace(",","")
+            data_arr[i, 3] = "".join(sorted(tmp))
+        # Set None mana_cost to 0
+        elif isinstance(data_arr[i, 3], type(None)):
+            r""" Maybe create seperate land and artifacts here?"""
+            data_arr[i, 3] = "0"
+
+        # Sanitize power
+        # Set * to -1 and None to -2
+        if isinstance(data_arr[i, 4], type(None)):
+            data_arr[i, 4] = -2
+        elif isinstance(data_arr[i, 4], str):
+            if "*" in data_arr[i, 4]:
+                data_arr[i, 4] = -1
+
+        # Sanitize toughness
+        # Set * to -1 and None to -2
+        if isinstance(data_arr[i, 5], type(None)):
+            data_arr[i, 5] = -2
+        elif isinstance(data_arr[i, 5], str):
+            if "*" in data_arr[i, 5]:
+                data_arr[i, 5] = -1
+        
+        # Sanitize prices
+        if isinstance(data_arr[i, 7], type(None)):
+            data_arr[i, 5] = np.NaN
+
+    # Number of trials in autotuner
+    TUNER_TRIALS=100
+    all_cols = [*GBTM_INPUTS, GBTM_OUT]
+    train_data_df0 = pd.DataFrame(data_arr, columns=all_cols)
+    # Fix dtypes
+    train_data_df = train_data_df0.convert_dtypes()
+
+    # # Save the preprocessed data for import next time
+    # train_data_df.to_csv()
+
+
+    # Loading pd dataframe into tf dataset
+    label = 'price_usd'
+    train_ds = tfdf.keras.pd_dataframe_to_tf_dataset(train_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
+    valid_ds = tfdf.keras.pd_dataframe_to_tf_dataset(valid_ds_pd, label=label, task = tfdf.keras.Task.REGRESSION)
+
+
+    "models/autotune_gbmt-%itrials.csv" % TUNER_TRIALS
+
+
+    # Start with random forest model, Use top ranking hyper parameters
+    rf = tfdf.keras.GradientBoostedTreesModel(
+        num_threads=16,
+        task = tfdf.keras.Task.REGRESSION)
+    rf.compile(metrics=["mae"]) # Optional, you can use this to include a lis of eval metrics
+    with tf.device('/device:GPU: 0'): 
+        # Train model on gpu
+        rf.fit(x=train_ds, verbose=1)
+
     # # Evaluate model on validation
     evaluation = rf.evaluate(x=valid_ds,return_dict=True)
 
@@ -200,5 +369,8 @@ def train_gbtm():
     mse = np.mean((preds - test_prices)**2) / len(test_prices)
     print(mse)
 
+
 # feature_selection()
+# train_gbtm()
+
 train_gbtm()
