@@ -1,5 +1,5 @@
 import sqlite3
-import os
+import numpy as np
 
 from .util import read_json, convert_legals, get_usd
 
@@ -113,6 +113,67 @@ class Database(object):
         # Close the cursor and connection
         self.cursor.close()
         self.conn.close()
+
+    def write_preprocessed_db(self, dbout, **kw):
+        self.preprocess_data(**kw)
+
+
+    def preprocess_data(self, cols=JSONCOLS):
+        for col in cols:
+            # Get cols
+            exec_str = "SELECT " + "%s "% col + "FROM cards" 
+            self.cursor.execute(exec_str)
+            data = self.cursor.fetchall()
+            # Build numpy array out of data
+            data_arr = np.array(data)
+            # Preprocess
+
+        if isinstance(odb, type(None)):
+
+
+    for col in cols:
+        Iprice = np.ones(data_arr.shape[0], dtype=bool)
+        # Preprocess the data
+        for i in range(data_arr.shape[0]):
+            # Sanitize prices
+            if isinstance(data_arr[i, 7], type(None)):
+                Iprice[i] = False
+            # Sanitize mana_cost
+            # Remove the brackets in the mana_cost and sort to remove uniqueness
+            if isinstance(data_arr[i, 0], str):
+                tmp = data_arr[i, 0].replace("{","").replace("}","")
+                data_arr[i, 0] = "".join(sorted(tmp))
+            # Set None mana_cost to 0
+            elif isinstance(data_arr[i, 0], type(None)):
+                data_arr[i, 0] = "0"
+
+            # Sanitize colors
+            # Remove the comma in the colors and sort to remove uniqueness
+            if isinstance(data_arr[i, 3], str):
+                tmp = data_arr[i, 3].replace(",","")
+                data_arr[i, 3] = "".join(sorted(tmp))
+            # Set None mana_cost to 0
+            elif isinstance(data_arr[i, 3], type(None)):
+                r""" Maybe create seperate land and artifacts here?"""
+                data_arr[i, 3] = "0"
+
+            # Sanitize power
+            # Set * to -1 and None to -2
+            if isinstance(data_arr[i, 4], type(None)):
+                data_arr[i, 4] = -2
+            elif isinstance(data_arr[i, 4], str):
+                if "*" in data_arr[i, 4]:
+                    data_arr[i, 4] = -1
+
+            # Sanitize toughness
+            # Set * to -1 and None to -2
+            if isinstance(data_arr[i, 5], type(None)):
+                data_arr[i, 5] = -2
+            elif isinstance(data_arr[i, 5], str):
+                if "*" in data_arr[i, 5]:
+                    data_arr[i, 5] = -1
+
+
 
 
 def fill_table(db, fjson, table, **kw):
