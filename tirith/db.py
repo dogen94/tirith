@@ -118,9 +118,9 @@ class Database(object):
         self.preprocess_data(dbout, **kw)
 
 
-    def preprocess_data(self, dbout, cols=JSONCOLS):
+    def preprocess_data(self, dbout, table, cols=JSONCOLS):
         for col in cols:
-            # Get cols
+            # Get col from self
             exec_str = "SELECT " + "%s "% col + "FROM cards"
             self.cursor.execute(exec_str)
             data = self.cursor.fetchall()
@@ -134,34 +134,47 @@ class Database(object):
                 pp_data = func(data_arr, **kws)
             else:
                 pp_data = data_arr
-        
+            # Need to insert row by row.
+            # Insert data to dbout
+            dbout.insert2table(table, [col], pp_data)
+        dbout.close_db()
 
 
 def preprocess_string(data, remove=[","], replace=None):
-    if remove:
-        for i,d in enumerate(data):
-            for c in remove:
-                data[i] = data[i].replace(c, "")
     if replace:
-        for i,d in enumerate(data):
-            for exist, new in replace.items():
-                data[i] = data[i].replace(exist, new)
+        for exist, new in replace.items():
+            if exist == None:
+                if data == None:
+                    data = new
+            else:
+                data = data.replace(exist, new)
+                
+    if remove:
+        for c in remove:
+            try:
+                data = data.replace(c, "")
+            except:
+                breakpoint()
     return data
 
 def preprocess_int(data, replace=None):
     if replace:
-        for i,d in enumerate(data):
-            for exist, new in replace.items():
-                if (data[i] == exist):
-                    data[i] = new
+        for exist, new in replace.items():
+            if (data == exist):
+                    data = new
     return data
 
 
+# Map column indices to their respective preprocessing functions
 PREPROCESS = {
     "name": {"func": preprocess_string,
-             "kw": {"remove": ","}},
+             "kw": {"remove": ",",
+                    "replace": {None: None}}
+            },
     "mana_cost": {"func": preprocess_string,
-             "kw": {"remove": ","}},
+             "kw": {"remove": ",",
+                    "replace": {None: "0"}},
+            },
     "colors": {"func": preprocess_string,
                "kw": {"remove": ",",
                       "replace": {None: "0"}
@@ -186,6 +199,53 @@ PREPROCESS = {
                      }
             },
 }
+
+
+def preprocess_data(raw_db, processed_db):
+    try:
+        # Get column names from raw_table
+        raw_db.cursor.execute("PRAGMA table_info(cards)")
+        columns = [row[1] for row in raw_db.cursor.fetchall()]
+
+        # Create a dictionary for column names to column indices
+        column_indices = {name: idx for idx, name in enumerate(columns)}
+
+        # Read raw data
+        raw_db.cursor.execute("SELECT * FROM cards")
+        raw_data = raw_db.cursor.fetchall()
+
+        # Preprocess data
+        preprocessed_data = []
+        for record in raw_data:
+            processed_record = []
+            for column_name, value in zip(columns, record):
+                # Apply the preprocessing function based on column name
+                preprocesses = PREPROCESS.get(column_name, False)
+                if preprocesses:
+                    ppkw = preprocesses.get("kw", {})
+                    preprocess_func = preprocesses.get("func")
+                    processed_value = preprocess_func(value, **ppkw)
+                else:
+                    processed_value = value
+                processed_record.append(processed_value)
+            preprocessed_data.append(tuple(processed_record))
+
+        # Insert preprocessed data into the preprocessed database
+        placeholders = ', '.join('?' * len(preprocessed_data[0]))
+        insert_query = f"INSERT INTO cards ({', '.join(columns)}) VALUES ({placeholders})"
+        processed_db.cursor.executemany(insert_query, preprocessed_data)
+        
+        # Commit changes
+        processed_db.conn.commit()
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        processed_db.conn.rollback()  # Rollback in case of an error
+
+    finally:
+        # Close connections
+        raw_db.close_db()
+        processed_db.close_db()
 
 
 def fill_table(db, fjson, table, **kw):
