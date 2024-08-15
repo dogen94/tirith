@@ -370,7 +370,79 @@ def predict_gbtm(set_tars, gbtm):
     print(mse)
 
 
-# feature_selection()
-# train_gbtm()
+TP_INPUTS = [
+    "type_line",
+    "oracle_text",
+    "name"
+]
 
-train_gbtm()
+TP_OUT = "price_usd"
+
+def text_regression():
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.model_selection import train_test_split
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import mean_squared_error
+
+    # Read in db
+    db = tirith.db.Database("db/oracle-card.db")
+    db.set_defns(ORACLE_TABLE_DEFNS)
+    # Values of set ids
+    setids = []
+    setq = []
+    for set,setid in STANDARD_SETS.items():
+        setids.append(setid)
+        setq.append("?")
+    setids = tuple(setids)
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
+    # Build sql query string
+    cols = ",".join(TP_INPUTS) + "," + TP_OUT
+    # Get desired cols of these cards
+    exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
+    # Build numpy array out of data
+    data_arr = np.array(data)
+    
+    I = np.ones(data_arr.shape[0], dtype=bool)
+    for icase in range(data_arr.shape[0]):
+        if data_arr[icase,0] == None:
+            data_arr[icase,0] = ""
+        if data_arr[icase,1] == None:
+            data_arr[icase,1] = ""
+        if data_arr[icase,-1] == None or data_arr[icase,-1] == "":
+            I[icase] = False
+    missing_inds = np.where(I == False)[0]
+    # Combine two texts
+    data_arr[:, 0] = data_arr[:, 0] + ":: " + data_arr[:, 1]
+    # Sample data
+    texts = data_arr[I, 0] + ":: " + data_arr[I, 1]
+    values = data_arr[I, -1]
+
+    # Preprocessing and feature extraction
+    vectorizer = TfidfVectorizer()
+    X = vectorizer.fit_transform(texts)
+    y = values
+
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Train a model
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    # Predict and evaluate
+    y_pred = model.predict(X_test)
+    mse = mean_squared_error(y_test, y_pred)
+    print(f'Mean Squared Error: {mse}')
+
+    # Predict values of missing text
+    new_texts = data_arr[missing_inds,0] + ":: " + data_arr[missing_inds,1]
+    new_X = vectorizer.transform(new_texts)
+    predicted_values = model.predict(new_X)
+    print(f'Predicted Value: {predicted_values}')
+
+
+# train_gbtm()
+text_regression()
