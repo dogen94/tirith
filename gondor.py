@@ -177,8 +177,9 @@ def train_gbtm():
         # Train model on gpu
         rf.fit(x=train_ds, verbose=1)
 
+    return rf
+    """
     # # Evaluate model on validation÷turn_dict=True)
-
     setq = ["?"]
     setids = tuple( [tirith.util.BLOOMBURROW_SETID] )
     # Build tuple of question marks to match all setids
@@ -216,7 +217,7 @@ def train_gbtm():
             data_arr[i, 3] = "".join(sorted(tmp))
         # Set None mana_cost to 0
         elif isinstance(data_arr[i, 3], type(None)):
-            r""" Maybe create seperate land and artifacts here?"""
+            # Maybe create seperate land and artifacts here?
             data_arr[i, 3] = "0"
 
         # Sanitize power
@@ -254,7 +255,7 @@ def train_gbtm():
     # Mean square error
     mse = np.mean((preds[Iprice1,0] - test_prices[Iprice1])**2) / len(test_prices[Iprice1])
     print(mse)
-
+    """
 
 def predict_gbtm(set_tars, gbtm):
     # Read in oracle-db
@@ -368,7 +369,7 @@ def predict_gbtm(set_tars, gbtm):
     # Mean square error
     mse = np.mean((preds - test_prices)**2) / len(test_prices)
     print(mse)
-
+    
 
 TP_INPUTS = [
     "type_line",
@@ -432,6 +433,8 @@ def text_regression():
     model = LinearRegression()
     model.fit(X_train, y_train)
 
+    return model, vectorizer
+    """
     # Predict and evaluate
     y_pred = model.predict(X_test)
     mse = mean_squared_error(y_test, y_pred)
@@ -442,7 +445,69 @@ def text_regression():
     new_X = vectorizer.transform(new_texts)
     predicted_values = model.predict(new_X)
     print(f'Predicted Value: {predicted_values}')
+    """
+
+# both of these need to take in the same card and mix predictions
 
 
-# train_gbtm()
-text_regression()
+def predict_model():
+    gbtm_model = train_gbtm()
+    token_model, transformer = text_regression()
+
+    # Read in db for token model, text not preprocessed yet :(
+    db = tirith.db.Database("db/oracle-card.db")
+    db.set_defns(ORACLE_TABLE_DEFNS)
+
+    # # Evaluate model on validation÷turn_dict=True)
+    setq = ["?"]
+    setids = tuple( [tirith.util.BLOOMBURROW_SETID] )
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
+    # Build sql query string
+    cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
+    # Get desired cols of these cards
+    exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
+    # Build numpy array out of data
+    text_data_arr = np.array(data)
+    # Process data
+    I = np.ones(text_data_arr.shape[0], dtype=bool)
+    for icase in range(text_data_arr.shape[0]):
+        if text_data_arr[icase,0] == None:
+            text_data_arr[icase,0] = ""
+        if text_data_arr[icase,1] == None:
+            text_data_arr[icase,1] = ""
+        if text_data_arr[icase,-1] == None or text_data_arr[icase,-1] == "":
+            I[icase] = False
+    missing_inds = np.where(I == False)[0]
+    # Combine two texts
+    text_data_arr[:, 0] = text_data_arr[:, 0] + ":: " + text_data_arr[:, 1]
+    # Sample data
+    texts = text_data_arr[I, 0] + ":: " + text_data_arr[I, 1]
+    values = text_data_arr[I, -1]
+    transformed_texts = transformer.transform(texts)
+
+    # Read in db
+    db = tirith.db.Database("db/oracle-card-pp.db")
+    db.set_defns(ORACLE_TABLE_DEFNS)
+
+    for set,setid in STANDARD_SETS.items():
+        setids.append(setid)
+        setq.append("?")
+    setids = tuple(setids)
+    # Build tuple of question marks to match all setids
+    setq = ",".join(setq)
+    # Build sql query string
+    cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
+    # Get desired cols of these cards
+    exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
+    db.cursor.execute(exec_str, setids)
+    data = db.cursor.fetchall()
+    # Build numpy array out of data
+    data_arr = np.array(data)
+
+
+
+
+    token_prediction = token_model.predict(transformed_texts)
