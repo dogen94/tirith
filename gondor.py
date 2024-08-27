@@ -69,6 +69,7 @@ GBTM_INPUTS = [
     "power",
     "toughness",
     "rarity",
+    "oracle_id",
 ]
 
 GBTM_OUT = "price_usd"
@@ -100,7 +101,7 @@ def train_gbtm():
     # Preprocess the data
     for i in range(data_arr.shape[0]):
         # Sanitize prices
-        if isinstance(data_arr[i, 7], type(None)):
+        if isinstance(data_arr[i, -1], type(None)):
             Iprice[i] = False
         # Sanitize mana_cost
         # Remove the brackets in the mana_cost and sort to remove uniqueness
@@ -141,6 +142,8 @@ def train_gbtm():
     TUNER_TRIALS=100
     all_cols = [*GBTM_INPUTS, GBTM_OUT]
     train_data_df0 = pd.DataFrame(data_arr[Iprice,:], columns=all_cols)
+    # Remove oracle_id
+    train_data_df0.pop("oracle_id")
     # Fix dtypes
     train_data_df = train_data_df0.convert_dtypes()
 
@@ -181,7 +184,7 @@ def train_gbtm():
     """
     # # Evaluate model on validation÷turn_dict=True)
     setq = ["?"]
-    setids = tuple( [tirith.util.BLOOMBURROW_SETID] )
+    setids = tuple( [tar_setid] )
     # Build tuple of question marks to match all setids
     setq = ",".join(setq)
     # Build sql query string
@@ -374,7 +377,8 @@ def predict_gbtm(set_tars, gbtm):
 TP_INPUTS = [
     "type_line",
     "oracle_text",
-    "name"
+    "name",
+    "oracle_id",
 ]
 
 TP_OUT = "price_usd"
@@ -450,7 +454,7 @@ def text_regression():
 # both of these need to take in the same card and mix predictions
 
 
-def predict_model():
+def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     gbtm_model = train_gbtm()
     token_model, transformer = text_regression()
 
@@ -460,11 +464,11 @@ def predict_model():
 
     # # Evaluate model on validation÷turn_dict=True)
     setq = ["?"]
-    setids = tuple( [tirith.util.BLOOMBURROW_SETID] )
+    setids = tuple( [tar_setid] )
     # Build tuple of question marks to match all setids
     setq = ",".join(setq)
     # Build sql query string
-    cols = ",".join(GBTM_INPUTS) + "," + GBTM_OUT
+    cols = ",".join(TP_INPUTS) + "," + TP_OUT
     # Get desired cols of these cards
     exec_str = "SELECT " + "%s "% cols + "FROM cards WHERE set_id IN (" + setq + ")" 
     db.cursor.execute(exec_str, setids)
@@ -492,10 +496,8 @@ def predict_model():
     db = tirith.db.Database("db/oracle-card-pp.db")
     db.set_defns(ORACLE_TABLE_DEFNS)
 
-    for set,setid in STANDARD_SETS.items():
-        setids.append(setid)
-        setq.append("?")
-    setids = tuple(setids)
+    setq = ["?"]
+    setids = tuple([tar_setid])
     # Build tuple of question marks to match all setids
     setq = ",".join(setq)
     # Build sql query string
@@ -505,9 +507,28 @@ def predict_model():
     db.cursor.execute(exec_str, setids)
     data = db.cursor.fetchall()
     # Build numpy array out of data
-    data_arr = np.array(data)
+    gbtm_data_arr = np.array(data)
 
 
 
-
+    all_cols = [*GBTM_INPUTS, GBTM_OUT]
+    pred_data_df0 = pd.DataFrame(gbtm_data_arr, columns=all_cols)
+    # Fix dtypes
+    pred_data_df = pred_data_df0.convert_dtypes()
+    pred_data_df.pop("price_usd")
+    pred_data_df.pop("oracle_id")
+    # Load prediction dataframe into keras ds
+    pred_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
+        pred_data_df,
+        task = tfdf.keras.Task.REGRESSION)
+    
+    # Predict the prices
+    gbtm_prediction = gbtm_model.predict(pred_ds)
     token_prediction = token_model.predict(transformed_texts)
+
+    plt.plot(gbtm_prediction, c="r")
+    plt.plot(token_prediction, c="b")
+    plt.show()
+    print("wait")
+
+predict_model()
