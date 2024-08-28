@@ -515,8 +515,10 @@ def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     pred_data_df0 = pd.DataFrame(gbtm_data_arr, columns=all_cols)
     # Fix dtypes
     pred_data_df = pred_data_df0.convert_dtypes()
+    # Manual fix mana_cost col
+    pred_data_df["mana_cost"] = pred_data_df["mana_cost"].astype(str)
     pred_data_df.pop("price_usd")
-    pred_data_df.pop("oracle_id")
+    pred_data_df.pop("oracle_id")    
     # Load prediction dataframe into keras ds
     pred_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
         pred_data_df,
@@ -526,9 +528,12 @@ def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     gbtm_prediction = gbtm_model.predict(pred_ds)
     token_prediction = token_model.predict(transformed_texts)
 
-    plt.plot(gbtm_prediction, c="r")
-    plt.plot(token_prediction, c="b")
+    # plt.plot(gbtm_prediction, c="r")
+    # plt.plot(token_prediction, c="b")
+    plt.plot((1-0.1)*gbtm_prediction[I,0] + 0.1*token_prediction, c="r")
+    plt.plot(values, c="k")
     plt.show()
+    
     print("wait")
 
 predict_model()
