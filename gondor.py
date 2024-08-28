@@ -493,7 +493,7 @@ def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     transformed_texts = transformer.transform(texts)
 
     # Read in db
-    db = tirith.db.Database("db/oracle-card-pp.db")
+    db = tirith.db.Database("db/oracle-card-pp3.db")
     db.set_defns(ORACLE_TABLE_DEFNS)
 
     setq = ["?"]
