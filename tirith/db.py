@@ -168,11 +168,11 @@ def preprocess_int(data, replace=None):
 # Map column indices to their respective preprocessing functions
 PREPROCESS = {
     "name": {"func": preprocess_string,
-             "kw": {"remove": ",",
-                    "replace": {None: None}}
+             "kw": {"remove": [","],
+                    "replace": {None: -1}}
             },
     "mana_cost": {"func": preprocess_string,
-             "kw": {"remove": ",",
+             "kw": {"remove": [",", "{", "}"],
                     "replace": {None: "0"}},
             },
     "colors": {"func": preprocess_string,
