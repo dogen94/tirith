@@ -383,7 +383,7 @@ TP_INPUTS = [
 
 TP_OUT = "price_usd"
 
-def text_regression():
+def text_regression(model, tokenizer):
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.model_selection import train_test_split
     from sklearn.linear_model import LinearRegression
@@ -426,18 +426,24 @@ def text_regression():
     values = data_arr[I, -1]
 
     # Preprocessing and feature extraction
-    vectorizer = TfidfVectorizer()
-    X = vectorizer.fit_transform(texts)
+    X = []
+    for tex in texts:
+        inputs = tokenizer(tex, return_tensors="pt")
+        out = model(**inputs)
+        X.append(out.pooler_output[0].detach().numpy())
+    # X = vectorizer.fit_transform(texts)
+    X_arr = np.array(X)
     y = values
 
     # Split the data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_arr, y, test_size=0.2, random_state=42)
 
     # Train a model
-    model = LinearRegression()
-    model.fit(X_train, y_train)
+    token_model = LinearRegression()
+    token_model.fit(X_train, y_train)
+    
 
-    return model, vectorizer
+    return token_model
     """
     # Predict and evaluate
     y_pred = model.predict(X_test)
@@ -454,9 +460,9 @@ def text_regression():
 # both of these need to take in the same card and mix predictions
 
 
-def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
+def predict_model(model, tokenizer, tar_setid=tirith.util.BLOOMBURROW_SETID):
     gbtm_model = train_gbtm()
-    token_model, transformer = text_regression()
+    token_model = text_regression(model, tokenizer)
 
     # Read in db for token model, text not preprocessed yet :(
     db = tirith.db.Database("db/oracle-card.db")
@@ -490,7 +496,13 @@ def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     # Sample data
     texts = text_data_arr[I, 0] + ":: " + text_data_arr[I, 1]
     values = text_data_arr[I, -1]
-    transformed_texts = transformer.transform(texts)
+    # Preprocessing and feature extraction
+    X = []
+    for tex in texts:
+        inputs = tokenizer(tex, return_tensors="pt")
+        out = model(**inputs)
+        X.append(out.pooler_output[0].detach().numpy())
+    transformed_texts = np.array(X)
 
     # Read in db
     db = tirith.db.Database("db/oracle-card-pp3.db")
@@ -509,8 +521,6 @@ def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     # Build numpy array out of data
     gbtm_data_arr = np.array(data)
 
-
-
     all_cols = [*GBTM_INPUTS, GBTM_OUT]
     pred_data_df0 = pd.DataFrame(gbtm_data_arr, columns=all_cols)
     # Fix dtypes
@@ -528,12 +538,16 @@ def predict_model(tar_setid=tirith.util.BLOOMBURROW_SETID):
     gbtm_prediction = gbtm_model.predict(pred_ds)
     token_prediction = token_model.predict(transformed_texts)
 
-    # plt.plot(gbtm_prediction, c="r")
-    # plt.plot(token_prediction, c="b")
-    plt.plot((1-0.1)*gbtm_prediction[I,0] + 0.1*token_prediction, c="r")
+    plt.plot(gbtm_prediction, c="r")
+    plt.plot(token_prediction, c="b")
+    # plt.plot((1-0.1)*gbtm_prediction[I,0] + 0.1*token_prediction, c="r")
     plt.plot(values, c="k")
     plt.show()
     
     print("wait")
 
-predict_model()
+
+from transformers import BertTokenizer, BertModel
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained("bert-base-uncased")
+predict_model(model, tokenizer)
