@@ -3,11 +3,12 @@ import tensorflow_decision_forests as tfdf
 import pandas as pd
 import numpy as np
 import keras
+import scipy.interpolate as scint
 from sklearn.preprocessing import OneHotEncoder
 import tirith.db
 from tirith.util import STANDARD_SETS
 from tirith.tables import ORACLE_TABLE_DEFNS
-
+import matplotlib.pyplot as plt
 
 # Explore the data
 def feature_selection():
@@ -439,8 +440,9 @@ def text_regression(model, tokenizer):
     X_train, X_test, y_train, y_test = train_test_split(X_arr, y, test_size=0.2, random_state=42)
 
     # Train a model
-    token_model = LinearRegression()
-    token_model.fit(X_train, y_train)
+    token_model = scint.Rbf([X_train, y_train])
+    # token_model = LinearRegression()
+    # token_model.fit(X_train, y_train)
     
 
     return token_model
