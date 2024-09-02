@@ -423,7 +423,7 @@ def text_regression(model, tokenizer):
     # Combine two texts
     data_arr[:, 0] = data_arr[:, 0] + ":: " + data_arr[:, 1]
     # Sample data
-    texts = data_arr[I, 0] + ":: " + data_arr[I, 1]
+    texts = data_arr[I, 0] + " " + data_arr[I, 1]
     values = data_arr[I, -1]
 
     # Preprocessing and feature extraction
@@ -436,16 +436,21 @@ def text_regression(model, tokenizer):
     X_arr = np.array(X)
     y = values
 
+    """
     # Split the data
     X_train, X_test, y_train, y_test = train_test_split(X_arr, y, test_size=0.2, random_state=42)
 
-    # Train a model
-    token_model = scint.Rbf([X_train, y_train])
-    # token_model = LinearRegression()
+    X_train_dots = np.dot(X_train, X_train.T)
+    X_train_mags = np.sqrt(np.diag(X_train_dots))
+    X_train_magsM = np.outer(X_train_mags, X_train_mags)
+    cos_sim = X_train_dots / X_train_magsM
+    # Train model
+    # token_model = scint.RBFInterpolator(X_train, y_train)
+    token_model = LinearRegression()
     # token_model.fit(X_train, y_train)
-    
+    """
 
-    return token_model
+    return X_arr, values
     """
     # Predict and evaluate
     y_pred = model.predict(X_test)
@@ -465,6 +470,7 @@ def text_regression(model, tokenizer):
 def predict_model(model, tokenizer, tar_setid=tirith.util.BLOOMBURROW_SETID):
     gbtm_model = train_gbtm()
     token_model = text_regression(model, tokenizer)
+    text_arr, val_arr = text_regression(model, tokenizer)
 
     # Read in db for token model, text not preprocessed yet :(
     db = tirith.db.Database("db/oracle-card.db")
@@ -504,7 +510,23 @@ def predict_model(model, tokenizer, tar_setid=tirith.util.BLOOMBURROW_SETID):
         inputs = tokenizer(tex, return_tensors="pt")
         out = model(**inputs)
         X.append(out.pooler_output[0].detach().numpy())
+    nX = len(X)
     transformed_texts = np.array(X)
+
+    transformed_texts = np.vstack([transformed_texts, text_arr])
+    X_train_dots = np.dot(transformed_texts, transformed_texts.T)
+    X_train_mags = np.sqrt(np.diag(X_train_dots))
+    X_train_magsM = np.outer(X_train_mags, X_train_mags)
+    cos_sim = X_train_dots / X_train_magsM
+    token_prediction = np.zeros(nX)
+    k_near = 10
+    for i in range(nX):
+        cos_inds = np.argsort(cos_sim[i,nX:])[::-1] 
+        # Get nearest inds
+        nearest_inds = cos_inds[:k_near]
+        # Weight the sum of cos sim [-1, 1] 
+        weights = cos_sim[i, nearest_inds + nX]
+        token_prediction[i] = np.sum(val_arr[nearest_inds]*weights) / k_near
 
     # Read in db
     db = tirith.db.Database("db/oracle-card-pp3.db")
@@ -535,17 +557,17 @@ def predict_model(model, tokenizer, tar_setid=tirith.util.BLOOMBURROW_SETID):
     pred_ds = tfdf.keras.pd_dataframe_to_tf_dataset(
         pred_data_df,
         task = tfdf.keras.Task.REGRESSION)
-    
+
     # Predict the prices
     gbtm_prediction = gbtm_model.predict(pred_ds)
-    token_prediction = token_model.predict(transformed_texts)
+    # token_prediction = token_model.predict(transformed_texts)
 
-    plt.plot(gbtm_prediction, c="r")
-    plt.plot(token_prediction, c="b")
-    # plt.plot((1-0.1)*gbtm_prediction[I,0] + 0.1*token_prediction, c="r")
+    # plt.plot(gbtm_prediction, c="r")
+    # plt.plot(token_prediction, c="b")
+    plt.plot((1-0.5)*gbtm_prediction[I,0] + 0.5*token_prediction, c="r")
     plt.plot(values, c="k")
     plt.show()
-    
+
     print("wait")
 
 
